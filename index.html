@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pomodoro</title>
+<link rel="icon" id="favicon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #E9ECE6;
+    --ink: #1B1F1C;
+    --green: #2F6B4F;
+    --orange: #D08A2E;
+    --red: #A83226;
+    --rest: #46555F;
+    --bg: var(--paper);
+    --fg: var(--ink);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #181B19; --ink: #E6E9E3; color-scheme: dark; }
+  }
+  body.green  { --bg: var(--green);  --fg: #F2F5EF; }
+  body.orange { --bg: var(--orange); --fg: #1E180F; }
+  body.red    { --bg: var(--red);    --fg: #FBEFEA; }
+  body.rest   { --bg: var(--rest);   --fg: #EEF2F4; }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: Manrope, system-ui, -apple-system, "Segoe UI", sans-serif;
+    transition: background-color 1.2s ease, color 1.2s ease;
+  }
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    padding: 2rem 1.25rem;
+    text-align: center;
+  }
+  .label { margin: 0; font-size: 1.125rem; font-weight: 500; opacity: .85; min-height: 1.5em; }
+  .time {
+    font-size: clamp(5rem, 24vw, 13rem);
+    font-weight: 300;
+    line-height: .9;
+    letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .actions { display: flex; gap: .75rem; margin-top: .5rem; }
+  .btn {
+    font: inherit; font-weight: 600; font-size: 1rem;
+    padding: .8rem 1.6rem;
+    border-radius: 999px;
+    border: 1.5px solid currentColor;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .btn.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .btn:focus-visible, .link:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+  .note { max-width: 34rem; margin: .5rem 0 0; font-size: 1rem; line-height: 1.5; opacity: .85; overflow-wrap: anywhere; }
+  .note .k { display: block; font-size: .875rem; opacity: .75; margin-bottom: .2rem; }
+  .note.big { font-size: 1.4rem; opacity: 1; }
+  footer { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem 1.25rem; }
+  .dots { display: flex; gap: .4rem; }
+  .dots span { width: .55rem; height: .55rem; border-radius: 50%; border: 1.5px solid currentColor; opacity: .6; }
+  .dots span.on { background: currentColor; opacity: 1; }
+  .link { background: none; border: 0; font: inherit; font-size: .9rem; color: inherit; opacity: .75; cursor: pointer; padding: .4rem .5rem; }
+  .link:hover { opacity: 1; }
+
+  dialog {
+    border: 0; border-radius: 14px; padding: 1.5rem;
+    width: calc(100% - 2rem); max-width: 26rem;
+    background: var(--paper); color: var(--ink);
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog h2 { margin: 0 0 .75rem; font-size: 1.25rem; font-weight: 700; }
+  dialog label { font-size: .95rem; }
+  textarea, input[type=number] {
+    font: inherit; color: inherit; background: transparent;
+    border: 1.5px solid rgba(127,127,127,.5); border-radius: 8px;
+    padding: .6rem .7rem; width: 100%;
+  }
+  textarea { margin-top: .5rem; resize: vertical; }
+  textarea:focus, input:focus { outline: 2px solid var(--green); outline-offset: 1px; }
+  .row { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.1rem; }
+  .field { display: grid; grid-template-columns: 1fr 5rem; align-items: center; gap: .75rem; margin: .6rem 0; }
+  .check { display: flex; gap: .6rem; align-items: center; margin: .6rem 0; }
+  .hint { font-size: .85rem; opacity: .7; margin: .25rem 0 0; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { body { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <p id="label" class="label" aria-live="polite"></p>
+  <div id="time" class="time" role="timer">25:00</div>
+  <div class="actions">
+    <button id="primary" class="btn primary">Start work</button>
+  </div>
+  <p id="note" class="note" hidden><span class="k" id="noteKey">Pick up with</span><span id="noteText"></span></p>
+</main>
+<footer>
+  <div id="dots" class="dots"></div>
+  <div>
+    <button id="resetBtn" class="link" hidden>Reset</button>
+    <button id="settingsBtn" class="link">Settings</button>
+  </div>
+</footer>
+
+<dialog id="breakDialog">
+  <form id="breakForm">
+    <h2>Before you stop</h2>
+    <label for="noteInput">How will you start the next work session?</label>
+    <textarea id="noteInput" rows="3" placeholder="e.g. Write the failing test for the empty basket case"></textarea>
+    <p class="hint">Enter to start your break, Shift+Enter for a new line.</p>
+    <div class="row">
+      <button type="button" id="breakCancel" class="btn">Keep working</button>
+      <button type="submit" class="btn solid">Start break</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settingsDialog">
+  <form id="settingsForm">
+    <h2>Settings</h2>
+    <div class="field"><label for="sWork">Work (minutes)</label><input id="sWork" type="number" min="1" max="240"></div>
+    <div class="field"><label for="sFlex">Flex time before break is due (minutes)</label><input id="sFlex" type="number" min="0" max="120"></div>
+    <div class="field"><label for="sShort">Short break (minutes)</label><input id="sShort" type="number" min="1" max="120"></div>
+    <div class="field"><label for="sLong">Long break (minutes)</label><input id="sLong" type="number" min="1" max="240"></div>
+    <div class="field"><label for="sEvery">Long break every (sessions)</label><input id="sEvery" type="number" min="1" max="12"></div>
+    <label class="check"><input id="sSound" type="checkbox"> Play a sound on phase changes</label>
+    <label class="check"><input id="sNotify" type="checkbox"> Show notifications when the tab is in the background</label>
+    <p id="notifyHint" class="hint" hidden>Notifications are blocked. Allow them in your browser’s site settings.</p>
+    <div class="row">
+      <button type="button" id="settingsCancel" class="btn">Cancel</button>
+      <button type="submit" class="btn solid">Save settings</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  const DEFAULT_SETTINGS = { work: 25, flex: 5, short: 5, long: 15, every: 4, sound: true, notify: true };
+  const freshState = () => ({ phase: 'idle', start: 0, end: 0, breakType: 'short', done: 0, note: '', fired: {} });
+  const COLORS = { idle: '#8A948C', green: '#2F6B4F', orange: '#D08A2E', red: '#A83226', rest: '#46555F' };
+
+  const load = (key, fallback) => {
+    try { return { ...fallback, ...JSON.parse(localStorage.getItem(key) || '{}') }; }
+    catch { return { ...fallback }; }
+  };
+  const persist = () => {
+    try {
+      localStorage.setItem('pomo.settings', JSON.stringify(settings));
+      localStorage.setItem('pomo.state', JSON.stringify(state));
+    } catch {}
+  };
+
+  let settings = load('pomo.settings', DEFAULT_SETTINGS);
+  let state = load('pomo.state', freshState());
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    label: $('label'), time: $('time'), primary: $('primary'),
+    note: $('note'), noteKey: $('noteKey'), noteText: $('noteText'),
+    dots: $('dots'), reset: $('resetBtn'), favicon: $('favicon'),
+    breakDialog: $('breakDialog'), breakForm: $('breakForm'), noteInput: $('noteInput'),
+    settingsDialog: $('settingsDialog'), settingsForm: $('settingsForm'),
+  };
+
+  // ---------- time helpers ----------
+  const MIN = 60000;
+  const fmt = ms => {
+    const total = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return h ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  };
+
+  // ---------- sound ----------
+  let audio;
+  const ensureAudio = () => {
+    if (!audio) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audio = new AC();
+    }
+    if (audio && audio.state === 'suspended') audio.resume();
+  };
+  const chime = notes => {
+    if (!settings.sound || !audio) return;
+    const t0 = audio.currentTime;
+    notes.forEach((freq, i) => {
+      const osc = audio.createOscillator(), gain = audio.createGain();
+      const t = t0 + i * 0.22;
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(t);
+      osc.stop(t + 1.3);
+    });
+  };
+
+  // ---------- notifications ----------
+  const canNotify = () => 'Notification' in window;
+  const requestPermission = () => {
+    if (settings.notify && canNotify() && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  };
+  const notify = (title, body) => {
+    if (!settings.notify || !canNotify() || Notification.permission !== 'granted' || !document.hidden) return;
+    try { new Notification(title, { body, tag: 'pomodoro', renotify: true }); } catch {}
+  };
+
+  const alertFor = kind => {
+    if (kind === 'orange') {
+      chime([660, 880]);
+      notify('Wrap up when ready', `Your break is due in ${settings.flex} min.`);
+    } else if (kind === 'red') {
+      chime([880, 660, 523]);
+      notify('Time to stop', 'Take your break now.');
+    } else if (kind === 'breakEnd') {
+      chime([523, 660, 784]);
+      notify('Break over', state.note ? `Pick up with: ${state.note}` : 'Ready when you are.');
+    }
+  };
+
+  // ---------- actions ----------
+  const startWork = () => {
+    ensureAudio();
+    requestPermission();
+    state.phase = 'work';
+    state.start = Date.now();
+    state.fired = {};
+    persist();
+    render();
+  };
+
+  const openBreakDialog = () => {
+    els.noteInput.value = '';
+    els.breakDialog.showModal();
+    els.noteInput.focus();
+  };
+
+  const startBreak = note => {
+    state.done += 1;
+    state.breakType = state.done % settings.every === 0 ? 'long' : 'short';
+    const mins = state.breakType === 'long' ? settings.long : settings.short;
+    state.phase = 'break';
+    state.end = Date.now() + mins * MIN;
+    state.note = note.trim();
+    state.fired = {};
+    persist();
+    render();
+  };
+
+  const endBreak = () => {
+    state.phase = 'ready';
+    persist();
+    render();
+  };
+
+  const resetAll = () => {
+    if (!confirm('Reset this session? Your cycle count and note will be cleared.')) return;
+    state = freshState();
+    persist();
+    render();
+  };
+
+  // ---------- rendering ----------
+  const setFavicon = color => {
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='${color}'/></svg>`;
+    els.favicon.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  };
+
+  const renderDots = () => {
+    const every = Math.min(settings.every, 12);
+    let filled = state.done % settings.every;
+    if ((state.phase === 'break' || state.phase === 'ready') && state.breakType === 'long') filled = settings.every;
+    filled = Math.min(filled, every);
+    els.dots.innerHTML = Array.from({ length: every }, (_, i) => `<span class="${i < filled ? 'on' : ''}"></span>`).join('');
+    els.dots.setAttribute('aria-label', `${filled} of ${settings.every} sessions before a long break`);
+  };
+
+  let lastTone = '';
+  const render = () => {
+    const now = Date.now();
+    let tone = 'idle', label = '', time = '', button = '', noteMode = 'hidden';
+
+    if (state.phase === 'idle') {
+      label = 'Ready when you are';
+      time = fmt(settings.work * MIN);
+      button = 'Start work';
+    } else if (state.phase === 'work') {
+      const elapsed = now - state.start;
+      const workMs = settings.work * MIN;
+      const flexMs = settings.flex * MIN;
+      button = 'Take break';
+      noteMode = 'small';
+      if (elapsed < workMs) {
+        tone = 'green';
+        label = 'Focus';
+        time = fmt(workMs - elapsed);
+      } else if (elapsed < workMs + flexMs) {
+        tone = 'orange';
+        label = 'Stop when you reach a good point';
+        time = fmt(workMs + flexMs - elapsed);
+        if (!state.fired.orange) { state.fired.orange = true; persist(); alertFor('orange'); }
+      } else {
+        tone = 'red';
+        label = 'Time to stop';
+        time = '+' + fmt(elapsed - workMs - flexMs);
+        if (!state.fired.red) { state.fired.orange = state.fired.red = true; persist(); alertFor('red'); }
+      }
+    } else if (state.phase === 'break') {
+      const remaining = state.end - now;
+      if (remaining <= 0) {
+        state.phase = 'ready';
+        persist();
+        alertFor('breakEnd');
+        return render();
+      }
+      tone = 'rest';
+      label = state.breakType === 'long' ? 'Long break' : 'Short break';
+      time = fmt(remaining);
+      button = 'Skip break';
+      noteMode = 'small';
+    } else if (state.phase === 'ready') {
+      tone = 'rest';
+      label = 'Break over';
+      time = fmt(settings.work * MIN);
+      button = 'Start work';
+      noteMode = 'big';
+    }
+
+    if (tone !== lastTone) {
+      document.body.className = tone === 'idle' ? '' : tone;
+      setFavicon(COLORS[tone]);
+      lastTone = tone;
+    }
+    if (els.label.textContent !== label) els.label.textContent = label;
+    els.time.textContent = time;
+    if (els.primary.textContent !== button) els.primary.textContent = button;
+    document.title = state.phase === 'idle' ? 'Pomodoro' : `${time} ${label}`;
+
+    const showNote = noteMode !== 'hidden' && state.note;
+    els.note.hidden = !showNote;
+    if (showNote) {
+      els.noteKey.textContent = state.phase === 'work' ? 'You started with' : 'Pick up with';
+      els.noteText.textContent = state.note;
+      els.note.classList.toggle('big', noteMode === 'big');
+    }
+    els.reset.hidden = state.phase === 'idle';
+    renderDots();
+  };
+
+  // ---------- events ----------
+  els.primary.addEventListener('click', () => {
+    ensureAudio();
+    if (state.phase === 'idle' || state.phase === 'ready') startWork();
+    else if (state.phase === 'work') openBreakDialog();
+    else if (state.phase === 'break') endBreak();
+  });
+
+  els.breakForm.addEventListener('submit', e => {
+    e.preventDefault();
+    els.breakDialog.close();
+    startBreak(els.noteInput.value);
+  });
+  $('breakCancel').addEventListener('click', () => els.breakDialog.close());
+  els.noteInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); els.breakForm.requestSubmit(); }
+  });
+
+  const fields = { work: 'sWork', flex: 'sFlex', short: 'sShort', long: 'sLong', every: 'sEvery' };
+  const updateNotifyHint = () => {
+    $('notifyHint').hidden = !($('sNotify').checked && canNotify() && Notification.permission === 'denied');
+  };
+  $('settingsBtn').addEventListener('click', () => {
+    Object.entries(fields).forEach(([k, id]) => { $(id).value = settings[k]; });
+    $('sSound').checked = settings.sound;
+    $('sNotify').checked = settings.notify;
+    updateNotifyHint();
+    els.settingsDialog.showModal();
+  });
+  $('sNotify').addEventListener('change', updateNotifyHint);
+  $('settingsCancel').addEventListener('click', () => els.settingsDialog.close());
+  els.settingsForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const num = (id, min, fallback) => {
+      const v = parseInt($(id).value, 10);
+      return Number.isFinite(v) && v >= min ? v : fallback;
+    };
+    settings = {
+      work: num('sWork', 1, DEFAULT_SETTINGS.work),
+      flex: num('sFlex', 0, DEFAULT_SETTINGS.flex),
+      short: num('sShort', 1, DEFAULT_SETTINGS.short),
+      long: num('sLong', 1, DEFAULT_SETTINGS.long),
+      every: num('sEvery', 1, DEFAULT_SETTINGS.every),
+      sound: $('sSound').checked,
+      notify: $('sNotify').checked,
+    };
+    persist();
+    requestPermission();
+    els.settingsDialog.close();
+    render();
+  });
+
+  els.reset.addEventListener('click', resetAll);
+
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space' || document.querySelector('dialog[open]')) return;
+    if (['INPUT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement.tagName)) return;
+    e.preventDefault();
+    els.primary.click();
+  });
+  document.addEventListener('pointerdown', ensureAudio, { once: true });
+
+  // Keep multiple tabs in sync
+  window.addEventListener('storage', e => {
+    if (e.key === 'pomo.state') state = load('pomo.state', freshState());
+    if (e.key === 'pomo.settings') settings = load('pomo.settings', DEFAULT_SETTINGS);
+    render();
+  });
+
+  render();
+  setInterval(render, 250);
+})();
+</script>
+</body>
+</html>
